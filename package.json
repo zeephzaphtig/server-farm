@@ -1,0 +1,22 @@
+{
+  "name": "server-farm",
+  "productName": "Server Farm",
+  "version": "1.0.0",
+  "description": "An idle game: grow a server farm from one Raspberry Pi to a Dyson swarm.",
+  "author": "Rob",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "node tools/test.js",
+    "sim": "node tools/sim.js active 24"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/haptics": "^6.0.0"
+  }
+}
