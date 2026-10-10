@@ -82,7 +82,7 @@ t('offline earnings: rate, minimum and cap', () => {
   const s = E.newState(); s.owned.laptop = 10;
   const inc = E.income(s);
   s.lastTick = 0;
-  assert.strictEqual(E.applyOffline(s, 10 * 1000), null);
+  assert.strictEqual(E.applyOffline(s, 10 * 1000), null); // under 30 s: counted as play time, no popup
   s.lastTick = 0;
   const r = E.applyOffline(s, 3600 * 1000);
   assert(near(r.earned, inc * 3600 * 0.5));
@@ -127,13 +127,32 @@ t('save round trip and junk handling', () => {
   for (const k of ['money', 'equity', 'equitySpent', 'clock']) assert.strictEqual(r[k], s[k]);
   assert.deepStrictEqual(r.owned, s.owned); assert.deepStrictEqual(r.ups, s.ups); assert.deepStrictEqual(r.perks, s.perks); assert.strictEqual(r.effects.length, 1);
   assert.strictEqual(r.settings.notation, 'sci');
-  const junk = E.deserialize(JSON.stringify({ money: 'lots', owned: { pi: -5, nope: 3, rack: 2.7 }, ups: { fake: 1 }, perks: { brand: 1 }, equity: -1, equitySpent: 9, effects: [{ kind: 'bogus' }] }));
+  const junk = E.deserialize(JSON.stringify({ v: 1, money: -3, owned: { pi: -5, nope: 3, rack: 2.7 }, ups: { fake: 1 }, perks: { brand: 1 }, equity: -1, equitySpent: 9, effects: [{ kind: 'bogus' }] }));
   assert.strictEqual(junk.money, 0); assert.deepStrictEqual(junk.owned, { rack: 2 }); assert.deepStrictEqual(junk.ups, {}); assert.strictEqual(junk.equity, 0); assert.strictEqual(junk.equitySpent, 0); assert.strictEqual(junk.effects.length, 0);
   assert.throws(() => E.deserialize('not json'));
   const code = E.exportCode(s); assert(code.startsWith('SF1:'));
   assert.strictEqual(E.importCode(code).money, 123.5);
   assert.throws(() => E.importCode('SF1:@@@'));
   assert.throws(() => E.importCode('hello'));
+});
+t('hostile saves are refused or cleaned', () => {
+  for (const bad of ['{}', '[]', 'null', '{"v":2,"money":5}', '{"v":1,"money":"5"}']) assert.throws(() => E.deserialize(bad), bad);
+  const proto = E.deserialize('{"v":1,"money":5,"ach":{"constructor":1,"toString":1,"hasOwnProperty":1,"own_pi_1":1},"ups":{"__proto__":{"glob12":1}},"effects":[{"kind":"constructor","until":1e9},{"kind":"toString","until":1e9}]}');
+  assert.deepStrictEqual(Object.keys(proto.ach), ['own_pi_1']);
+  assert.strictEqual(proto.ups.glob12, undefined); assert.strictEqual(E.globalMult(proto), 1 + E.achBonus(proto));
+  assert.strictEqual(proto.effects.length, 0);
+});
+t('huge numbers stay finite through buying and saving', () => {
+  const s = E.newState(); s.money = 1e308; s.owned.universe = 5;
+  E.tick(s, 1e6); assert(isFinite(s.money) && s.money <= 1e300);
+  E.buyGen(s, 'pi', 'max'); assert(isFinite(s.money) && s.money >= 0);
+  const r = E.deserialize(E.serialize(s)); assert(r.money > 0 && isFinite(r.money));
+});
+t('clock moving backwards grants nothing, short gaps count fully', () => {
+  const s = E.newState(); s.owned.laptop = 10; const inc = E.income(s);
+  s.lastTick = 10 * 3600 * 1000; s.money = 0;
+  assert.strictEqual(E.applyOffline(s, 9 * 3600 * 1000), null); assert.strictEqual(s.money, 0); assert.strictEqual(s.lastTick, 10 * 3600 * 1000);
+  assert.strictEqual(E.applyOffline(s, 10 * 3600 * 1000 + 20000), null); assert(near(s.money, inc * 20));
 });
 t('number formatting', () => {
   const cases = [[0, '0'], [0.1, '0.1'], [1.5, '1.5'], [15, '15'], [99.99, '99.9'], [999.9, '999'], [1000, '1.00K'], [1234567, '1.23M'], [999999, '999K'], [12.5e9, '12.5B'], [1e15, '1.00Qa'], [-2500, '-2.50K'], [Infinity, 'MAX']];

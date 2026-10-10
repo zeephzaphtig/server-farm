@@ -7,8 +7,11 @@
 
   // ---------------- load
   let S;
-  try { const raw = root.localStorage && root.localStorage.getItem(KEY); S = raw ? E.deserialize(raw) : E.newState(); }
-  catch (e) { S = E.newState(); }
+  const store = (k, v) => { try { if (root.localStorage) root.localStorage.setItem(k, v); } catch (e) { /* storage full or blocked */ } };
+  let raw = null;
+  try { raw = root.localStorage && root.localStorage.getItem(KEY); } catch (e) { /* storage blocked */ }
+  try { S = raw ? E.deserialize(raw) : E.newState(); }
+  catch (e) { S = E.newState(); if (raw) store(KEY + '.corrupt', raw); } // never silently overwrite a save we could not read
   function applySettings() {
     F.setNotation(S.settings.notation);
     Sound.setVolume('sfx', S.settings.sfx);
@@ -18,8 +21,8 @@
   applySettings();
 
   function save() {
-    S.lastTick = Date.now();
-    try { root.localStorage && root.localStorage.setItem(KEY, E.serialize(S)); } catch (e) { /* storage full or blocked */ }
+    S.lastTick = Math.max(S.lastTick, Date.now());
+    store(KEY, E.serialize(S));
   }
 
   // ---------------- actions the UI calls
@@ -48,7 +51,7 @@
       UI.toast(`Sold for +${F.num(gain)} Equity`, 'Fresh start. Everything earns more now.', D.svg('equity'));
       afterChange(); save();
     },
-    replace(ns) { S = ns; applySettings(); UI.setState(S); save(); },
+    replace(ns) { store(KEY + '.bak', E.serialize(S)); S = ns; S.lastTick = Date.now(); applySettings(); UI.setState(S); save(); },
     save,
   };
   function afterChange() { checkAch(); UI.update(); }
@@ -111,7 +114,10 @@
   // ---------------- time away
   function resume() {
     const r = E.applyOffline(S, Date.now());
-    if (r && r.earned > 0 && r.away >= 60) UI.showOffline(r);
+    if (r && r.earned > 0 && r.away >= 60) {
+      if (UI.modalOpen) UI.toast('Welcome back', `Your servers earned ${F.money(r.earned)} while you were away`);
+      else UI.showOffline(r);
+    }
     checkAch(); UI.update();
   }
   function pause() { save(); Sound.suspend(); }
@@ -140,7 +146,8 @@
   for (const ev of ['pointerdown', 'pointerup', 'click', 'touchend', 'keydown']) root.addEventListener(ev, gesture, true);
 
   // ---------------- loop
-  let last = performance.now(), uiAcc = 0, achAcc = 0, saveAcc = 0, logged = 0;
+  let last = performance.now(), uiAcc = 0, achAcc = 0, saveAcc = 0, logged = 0, lastBoost = null;
+  const boostEl = document.getElementById('boost'), toastsEl = document.getElementById('toasts');
   function frame(now) {
     requestAnimationFrame(frame);
     try { step(now); } catch (err) { if (logged++ < 5) console.error(err); }
@@ -148,17 +155,25 @@
   function step(now) {
     let dt = (now - last) / 1000;
     last = now;
-    // the app was frozen in the background without telling us: count it as time away
-    if (Date.now() - S.lastTick > 5000) { resume(); dt = 0; }
+    // a stall or a trip to the background that no event told us about: credit it as time away
+    if (Date.now() - S.lastTick > 1000) { resume(); dt = 0; }
     dt = Math.min(0.25, Math.max(0, dt));
     E.tick(S, dt);
-    S.lastTick = Date.now();
-    if (S.clock >= S.nextPacket) {
+    S.lastTick = Math.max(S.lastTick, Date.now());
+    const covered = UI.modalOpen;
+    if (!covered && S.clock >= S.nextPacket) {
       if (!Scene.spike) { Scene.spawnSpike(E.spikeLife(S)); Sound.play('spike'); Sound.buzz('light'); }
-      S.nextPacket = S.clock + E.spikeLife(S) + E.nextSpikeDelay(S, Math.random);
+      S.nextPacket = S.clock + E.nextSpikeDelay(S, Math.random);
     }
     const boost = S.effects.find(e => e.until > S.clock && D.EFFECTS[e.kind].mult);
-    Scene.frame({ tier: E.topTier(S), owned: S.owned, income: E.income(S, true), boost: boost ? D.EFFECTS[boost.kind].color : null }, now, dt);
+    const boostColor = boost ? D.EFFECTS[boost.kind].color : null;
+    if (boostColor !== lastBoost) {
+      lastBoost = boostColor;
+      boostEl.classList.toggle('on', !!boostColor);
+      if (boostColor) boostEl.style.setProperty('--boost', boostColor + '55');
+    }
+    toastsEl.classList.toggle('dim', !!Scene.spike);
+    if (!covered) Scene.frame({ tier: E.topTier(S), owned: S.owned, income: E.income(S, true), boost: boostColor }, now, dt);
     UI.updateTicker(dt);
     uiAcc += dt; achAcc += dt; saveAcc += dt;
     if (uiAcc >= 0.12) { uiAcc = 0; UI.update(); }

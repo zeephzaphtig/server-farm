@@ -50,7 +50,11 @@ svg { display: block; }
 /* ---------- hero */
 #hero { flex: none; position: relative; height: var(--hero-h); overflow: hidden; background: #0b121b; touch-action: none; }
 #scene { position: absolute; inset: 0; display: block; }
-#effects { position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column; gap: 5px; pointer-events: none; z-index: 2; }
+#effects { position: absolute; left: 8px; right: 8px; bottom: 32px; display: flex; flex-wrap: wrap-reverse; gap: 5px; pointer-events: none; z-index: 2; }
+#boost { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.4s; background: radial-gradient(closest-side, transparent 62%, var(--boost, transparent)); }
+#boost.on { opacity: 1; animation: boostpulse 1.3s ease-in-out infinite; }
+@keyframes boostpulse { 50% { opacity: 0.6; } }
+#toasts.dim { opacity: 0.3; transition: opacity 0.3s; }
 .fx { position: relative; overflow: hidden; display: flex; align-items: center; gap: 6px; padding: 4px 9px 5px 7px; border-radius: 6px; background: rgba(8, 12, 18, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.1); font: 600 13px/1 var(--cond); }
 .fx .dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 8px currentColor; background: currentColor; }
@@ -93,7 +97,7 @@ svg { display: block; }
 .bar-top { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
 .bar-top .grow { flex: 1; color: var(--muted); font: 500 13px/1.2 var(--cond); }
 .seg { display: flex; padding: 3px; gap: 3px; border-radius: 8px; background: #0c1218; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8); }
-.seg button { min-width: 50px; height: 36px; padding: 0 8px; border-radius: 6px; font: 700 14px/1 var(--cond); color: var(--muted); }
+.seg button { min-width: 50px; height: 40px; padding: 0 8px; border-radius: 6px; font: 700 14px/1 var(--cond); color: var(--muted); }
 .seg button.on { background: linear-gradient(180deg, #4a5664, #36414d); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15); }
 
 /* 1U faceplates */
@@ -108,6 +112,7 @@ svg { display: block; }
 .unit .body { flex: 1; min-width: 0; padding: 7px 0; }
 .unit .nm { display: block; font: 700 16px/1.15 var(--cond); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .unit .sub { display: block; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.unit .sub.wrap { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; }
 .unit .ms { position: relative; display: block; height: 3px; margin-top: 6px; border-radius: 2px; background: #151c24; overflow: hidden; }
 .unit .ms i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cold); opacity: 0.75; }
 .unit .cnt { flex: none; min-width: 40px; margin: 0 6px; padding: 3px 5px; border-radius: 3px; background: #0e1309; color: #9dff7a; text-align: right;
@@ -187,9 +192,10 @@ h3.sec small { font-weight: 500; color: var(--muted); margin-left: 6px; }
 .ach-detail { min-height: 58px; padding: 10px 12px; border-radius: 6px; background: var(--rail-hi); margin-bottom: 8px; font-size: 13.5px; color: var(--muted); }
 .ach-detail b { display: block; color: #fff; font: 700 16px/1.2 var(--cond); }
 .achs { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 5px; }
-.ach { aspect-ratio: 1; border-radius: 5px; background: #121920; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8); display: grid; place-items: center; }
+.ach { position: relative; aspect-ratio: 1; border-radius: 5px; background: #121920; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8); display: grid; place-items: center; }
 .ach i { width: 12px; height: 12px; border-radius: 50%; background: #26303a; }
 .ach.got i { background: var(--c, var(--led-green)); box-shadow: 0 0 8px var(--c, var(--led-green)); }
+.ach.got::after { content: ""; position: absolute; left: calc(50% - 5px); bottom: 18%; width: 10px; height: 2px; border-radius: 1px; background: rgba(255, 255, 255, 0.55); }
 .ach.sel { box-shadow: inset 0 0 0 2px var(--cold); }
 
 /* modal */
@@ -201,18 +207,19 @@ h3.sec small { font-weight: 500; color: var(--muted); margin-left: 6px; }
 .dlg p { margin: 0 0 10px; color: #c4cfda; }
 .dlg .row { display: flex; align-items: center; gap: 10px; min-height: 48px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
 .dlg .row > span { flex: 1; }
-.dlg .row input[type=range] { width: 46%; accent-color: var(--amber); }
+.dlg .row input[type=range] { width: 46%; height: 40px; accent-color: var(--amber); }
 .dlg .acts { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }
 .dlg textarea { width: 100%; min-height: 90px; margin: 6px 0; padding: 8px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.15); background: #0d1218; color: var(--ink);
   font: 12px/1.3 monospace; resize: vertical; user-select: text; -webkit-user-select: text; }
-.rocker { width: 58px; height: 32px; border-radius: 6px; background: #10161c; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8); position: relative; }
-.rocker::after { content: ""; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 4px; background: linear-gradient(180deg, #5a6674, #3c4652); transition: left 0.15s; }
+.rocker { width: 64px; height: 40px; border-radius: 6px; background: #10161c; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8); position: relative; }
+.rocker::after { content: ""; position: absolute; top: 4px; left: 4px; width: 28px; height: 32px; border-radius: 4px; background: linear-gradient(180deg, #5a6674, #3c4652); transition: left 0.15s; }
 .rocker.on { background: #0f2e1c; }
-.rocker.on::after { left: 29px; background: linear-gradient(180deg, #3ddc84, #23a35c); }
+.rocker.on::after { left: 32px; background: linear-gradient(180deg, #3ddc84, #23a35c); }
 .big-num { font: 800 30px/1.1 var(--cond); color: var(--amber); margin: 4px 0 8px; }
 .howto { padding-left: 18px; margin: 0 0 10px; color: #c4cfda; }
 .howto li { margin-bottom: 6px; }
 
+@media (max-width: 380px) { .unit .buy { width: 76px; } .unit .ico { width: 36px; height: 36px; margin: 0 6px; } .unit .cnt { min-width: 34px; margin: 0 4px; } .unit .nm { font-size: 15px; } }
 @media (min-height: 760px) { :root { --hero-h: 40vh; } }
 @media (max-height: 600px) { :root { --hero-h: 34vh; } #lcd { height: 54px; } .tab { height: 40px; } }
 @media (prefers-reduced-motion: reduce) { #hint { animation: none; } .toast { animation: none; } }

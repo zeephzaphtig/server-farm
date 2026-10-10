@@ -21,6 +21,7 @@
     const tabs = $('#tabs');
     for (const t of TABS) {
       const b = el('button', 'tab', `<span>${t.name}</span><span class="badge" hidden></span>`);
+      b.setAttribute('role', 'tab');
       b.style.setProperty('--c', t.c);
       b.addEventListener('click', () => { if (ui.tab !== t.id) { Sound.play('tab'); Sound.buzz('light'); setTab(t.id); } });
       tabs.appendChild(b);
@@ -33,7 +34,7 @@
   function setState(state) { S = state; ui.sig = ''; ui.lcdText = ''; render(); }
   function setTab(id) {
     ui.tab = id;
-    for (const t of TABS) ui.tabEls[t.id].classList.toggle('on', t.id === id);
+    for (const t of TABS) { ui.tabEls[t.id].classList.toggle('on', t.id === id); ui.tabEls[t.id].setAttribute('aria-selected', String(t.id === id)); }
     ui.sig = '';
     render();
     $('#list').scrollTop = 0;
@@ -53,6 +54,7 @@
     const key = `${w}x${h}@${dpr}`;
     if (!force && text === ui.lcdText && key === lcdKey) return;
     ui.lcdText = text;
+    cv.setAttribute('aria-label', `${line1}, earning ${line2.replace('/s', ' per second')}`);
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     const g = cv.getContext('2d');
     const pad = 9;
@@ -107,7 +109,9 @@
     const seg = el('div', 'seg');
     for (const a of [1, 10, 100, 'max']) {
       const b = el('button', ui.amt === a ? 'on' : '', a === 'max' ? 'Max' : '×' + a);
-      b.addEventListener('click', () => { ui.amt = a; Sound.play('tab'); [...seg.children].forEach(x => x.classList.toggle('on', x === b)); update(true); });
+      b.setAttribute('aria-pressed', String(ui.amt === a));
+      b.setAttribute('aria-label', a === 'max' ? 'Buy as many as you can afford' : 'Buy ' + a + ' at a time');
+      b.addEventListener('click', () => { ui.amt = a; Sound.play('tab'); [...seg.children].forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); }); update(true); });
       seg.appendChild(b);
     }
     top.appendChild(seg);
@@ -135,11 +139,13 @@
       setText(r.pr, F.money(cost));
       setText(r.qty, k > 1 ? '×' + F.num(k) : '');
       r.b.classList.toggle('ok', ok);
+      r.b.setAttribute('aria-disabled', String(!ok));
       if (r.state === 'mystery') { setText(r.sub, 'Keep growing to unlock'); continue; }
       const each = E.unitRate(S, id);
       const share = E.genIncome(S, id) / total * 100;
-      if (n > 0) setText(r.sub, `${F.money(each)}/s each · ${share < 1 ? '<1' : Math.round(share)}% of income`);
+      if (n > 0) setText(r.sub, `${F.money(each)}/s each · ${share < 1 ? '<1' : Math.round(share)}%`);
       else setText(r.sub, g.desc);
+      r.sub.classList.toggle('wrap', n === 0);
       const next = D.TIER_AT.find(t => t > n) || null;
       const prev = [...D.TIER_AT].reverse().find(t => t <= n) || 0;
       r.ms.style.width = next ? Math.round((n - prev) / (next - prev) * 100) + '%' : '100%';
@@ -183,6 +189,7 @@
       const ok = S.money >= r.cost;
       if (ok) n++;
       r.b.classList.toggle('ok', ok);
+      r.b.setAttribute('aria-disabled', String(!ok));
     }
     if (ui.rows.all) ui.rows.all.b.disabled = n === 0;
   }
@@ -259,6 +266,7 @@
       if (!x.perk || S.perks[x.perk.id]) continue;
       const can = E.canBuyPerk(S, x.perk.id);
       x.b.classList.toggle('ok', can);
+      x.b.setAttribute('aria-disabled', String(!can));
     }
   }
 
@@ -277,7 +285,7 @@
     for (const a of D.ACH) {
       const b = el('button', 'ach' + (S.ach[a.id] ? ' got' : ''), '<i></i>');
       b.style.setProperty('--c', ACH_COLOR[a.cond.type]);
-      b.setAttribute('aria-label', a.name);
+      b.setAttribute('aria-label', S.ach[a.id] ? `${a.name}, unlocked` : `Locked: ${a.desc}`);
       b.addEventListener('click', () => {
         grid.querySelectorAll('.sel').forEach(x => x.classList.remove('sel'));
         b.classList.add('sel');
@@ -310,7 +318,12 @@
     const html = rows.map(([k, v]) => `<div>${k}</div><div>${v}</div>`).join('');
     setHTML(kv, html);
     setText(ui.rows.achHead.h, `${E.count(S.ach)} of ${D.ACH.length}`);
-    for (const id in ui.rows) { const r = ui.rows[id]; if (r.a) r.b.classList.toggle('got', !!S.ach[r.a.id]); }
+    for (const id in ui.rows) {
+      const r = ui.rows[id];
+      if (!r.a) continue;
+      const got = !!S.ach[r.a.id];
+      if (r.b.classList.contains('got') !== got) { r.b.classList.toggle('got', got); r.b.setAttribute('aria-label', got ? `${r.a.name}, unlocked` : `Locked: ${r.a.desc}`); }
+    }
   }
 
   function setText(e, t) { if (e && e.textContent !== t) e.textContent = t; }
@@ -347,7 +360,8 @@
       box.innerHTML = '';
       for (const e of want) {
         const fx = D.EFFECTS[e.kind];
-        const p = el('div', 'fx', `<span class="dot"></span><span>${fx.name} · ${fx.desc}</span><span class="tm"></span><span class="bar"></span>`);
+        const p = el('div', 'fx', `<span class="dot"></span><span>${fx.desc}</span><span class="tm"></span><span class="bar"></span>`);
+        p.setAttribute('aria-label', fx.name + ', ' + fx.desc);
         p.style.color = fx.color;
         p.firstChild.nextSibling.style.color = '#fff';
         box.appendChild(p);
@@ -382,7 +396,8 @@
     const fresh = D.NEWS.filter(([t]) => t === tier).map(n => n[1]);
     let choice;
     for (let i = 0; i < 8; i++) {
-      choice = (Math.random() < 0.45 && fresh.length ? fresh : pool)[Math.floor(Math.random() * (Math.random() < 0.45 && fresh.length ? fresh.length : pool.length))];
+      const arr = Math.random() < 0.45 && fresh.length ? fresh : pool;
+      choice = arr[Math.floor(Math.random() * arr.length)];
       if (choice && !tick.recent.includes(choice)) break;
     }
     if (!choice) choice = pool[0];
@@ -402,17 +417,22 @@
     const m = $('#modal');
     m.innerHTML = '';
     const d = el('div', 'dlg');
+    d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.tabIndex = -1;
     build(d);
     m.appendChild(d);
     m.hidden = false;
+    $('#app').inert = true;
     ui.modalOpen = opts || {};
     m.onclick = (e) => { if (e.target === m && !(opts && opts.sticky)) closeModal(); };
+    d.focus({ preventScroll: true });
   }
-  function closeModal() {
+  /** Close the open dialog. Its onClose runs (e.g. going back to Settings) unless skipAfter is set. */
+  function closeModal(skipAfter) {
     const m = $('#modal');
     if (m.hidden) return false;
-    const after = ui.modalOpen && ui.modalOpen.onClose;
+    const after = !skipAfter && ui.modalOpen && ui.modalOpen.onClose;
     m.hidden = true; m.innerHTML = ''; ui.modalOpen = null;
+    $('#app').inert = false;
     if (after) after();
     return true;
   }
@@ -449,26 +469,30 @@
       const slider = (label, key, fn) => {
         const row = el('div', 'row', `<span>${label}</span>`);
         const r = el('input'); r.type = 'range'; r.min = 0; r.max = 1; r.step = 0.05; r.value = st[key];
+        r.setAttribute('aria-label', label);
         r.addEventListener('input', () => { st[key] = +r.value; fn(st[key]); });
+        r.addEventListener('change', () => actions.save());
         row.appendChild(r); d.appendChild(row);
       };
       const rocker = (label, get, set) => {
         const row = el('div', 'row', `<span>${label}</span>`);
         const b = el('button', 'rocker' + (get() ? ' on' : ''));
+        b.setAttribute('role', 'switch'); b.setAttribute('aria-checked', String(!!get()));
         b.setAttribute('aria-label', label);
-        b.addEventListener('click', () => { set(!get()); b.classList.toggle('on', get()); Sound.play('tab'); Sound.buzz('light'); });
+        b.addEventListener('click', () => { set(!get()); b.classList.toggle('on', get()); b.setAttribute('aria-checked', String(!!get())); actions.save(); Sound.play('tab'); Sound.buzz('light'); });
         row.appendChild(b); d.appendChild(row);
       };
       slider('Sound effects', 'sfx', (v) => { Sound.setVolume('sfx', v); Sound.play('buy'); });
       slider('Music', 'music', (v) => { Sound.setVolume('music', v); if (v > 0) Sound.startMusic(); else Sound.stopMusic(); });
       rocker('Vibration', () => st.haptics, (v) => { st.haptics = v; Sound.setHaptics(v); });
       rocker('Scientific numbers (1.23e15)', () => st.notation === 'sci', (v) => { st.notation = v ? 'sci' : 'short'; F.setNotation(st.notation); ui.lcdText = ''; ui.sig = ''; render(); });
-      actionsRow(d, [['How to play', '', () => showHelp()], ['Back up save', '', () => showExport()], ['Restore save', '', () => showImport()]]);
-      actionsRow(d, [['Erase everything', 'warn', () => confirmReset()], ['Done', 'go', () => closeModal()]]);
+      const backHere = () => showSettings();
+      actionsRow(d, [['How to play', '', () => showHelp(backHere)], ['Back up save', '', () => showExport(backHere)], ['Restore save', '', () => showImport(backHere)]]);
+      actionsRow(d, [['Erase everything', 'warn', () => confirmReset(backHere)], ['Done', 'go', () => closeModal()]]);
       d.appendChild(el('p', '', '<span style="color:var(--muted);font-size:12px">Server Farm 1.0 · made for Rob</span>'));
     }, { onClose: () => actions.save() });
   }
-  function showHelp() {
+  function showHelp(after) {
     modal((d) => {
       d.innerHTML = '<h2>How to play</h2><ol class="howto">' +
         '<li>Tap the chip to earn money.</li>' +
@@ -477,37 +501,39 @@
         '<li>When a golden traffic spike floats across the screen, tap it for a bonus.</li>' +
         '<li>Later, sell the company for Equity. You start over, but everything earns more, and Equity buys permanent perks.</li></ol>';
       actionsRow(d, [['Got it', 'go', () => closeModal()]]);
-    });
+    }, { onClose: after });
   }
-  function showExport() {
+  function showExport(after) {
     const code = E.exportCode(S);
     modal((d) => {
       d.innerHTML = '<h2>Back up save</h2><p>Copy this code somewhere safe. Restore save brings it back, even on another phone.</p>';
       const ta = el('textarea'); ta.readOnly = true; ta.value = code; d.appendChild(ta);
-      actionsRow(d, [['Copy', 'go', () => {
+      const row = actionsRow(d, [['Copy', 'go', () => {
         ta.select();
-        const done = () => toast('Copied', 'Save code is on your clipboard.');
-        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done, () => { document.execCommand('copy'); done(); });
-        else { document.execCommand('copy'); done(); }
+        const btn = row.firstChild;
+        const result = (ok) => { btn.textContent = ok ? 'Copied' : 'Copy failed: select the text and copy it'; Sound.play(ok ? 'buy' : 'deny'); };
+        const fallback = () => { let ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; } result(ok); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(() => result(true), fallback);
+        else fallback();
       }], ['Close', '', () => closeModal()]]);
-    });
+    }, { onClose: after });
   }
-  function showImport() {
+  function showImport(after) {
     modal((d) => {
       d.innerHTML = '<h2>Restore save</h2><p>Paste a save code. This replaces your current game.</p>';
       const ta = el('textarea'); ta.placeholder = 'SF1:...'; d.appendChild(ta);
       const msg = el('p', ''); d.appendChild(msg);
       actionsRow(d, [['Cancel', '', () => closeModal()], ['Restore', 'go', () => {
-        try { const ns = E.importCode(ta.value); closeModal(); actions.replace(ns); toast('Save restored'); }
+        try { const ns = E.importCode(ta.value); closeModal(true); actions.replace(ns); toast('Save restored', 'Your previous game is kept as a backup.'); }
         catch (e) { msg.textContent = e.message; Sound.play('deny'); }
       }]]);
-    });
+    }, { onClose: after });
   }
-  function confirmReset() {
+  function confirmReset(after) {
     modal((d) => {
       d.innerHTML = '<h2>Erase everything?</h2><p>All progress, Equity, perks and achievements are deleted. This cannot be undone.</p>';
-      actionsRow(d, [['Cancel', '', () => closeModal()], ['Erase', 'warn', () => { closeModal(); actions.replace(E.newState()); toast('Fresh start'); }]]);
-    });
+      actionsRow(d, [['Cancel', '', () => closeModal()], ['Erase', 'warn', () => { closeModal(true); actions.replace(E.newState()); toast('Fresh start'); }]]);
+    }, { onClose: after });
   }
 
   /** Android back button / Escape. Returns false when there is nothing left to close. */

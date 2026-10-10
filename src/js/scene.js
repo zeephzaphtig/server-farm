@@ -86,6 +86,7 @@
     b.setTransform(dpr, 0, 0, dpr, 0, 0);
     leds = [];
     [bakeDesk, bakeRoom, bakeHall, bakeOrbit, bakeCosmos][era](b, v, rng(31 + era));
+    leds.sort((a, c) => (a.color < c.color ? -1 : a.color > c.color ? 1 : 0));
     // traces
     const E = ERAS[era];
     b.lineCap = 'round'; b.lineJoin = 'round';
@@ -319,13 +320,21 @@
   }
 
   // ---------------- live layers
+  const litBuf = [];
   function drawLeds(now, speed) {
-    for (const l of leds) {
-      const on = Math.sin(now * 0.001 * l.rate * speed + l.phase) > -0.2;
-      if (!on) continue;
-      g.fillStyle = l.color;
-      g.globalAlpha = 0.25; g.fillRect(l.x - 2, l.y - 2, 5, 5);
-      g.globalAlpha = 1; g.fillRect(l.x - 0.8, l.y - 0.8, 2.2, 2.2);
+    // leds are sorted by colour after baking, so each colour is two batched passes instead of a state change per light
+    const t = now * 0.001 * speed;
+    let i = 0;
+    while (i < leds.length) {
+      const color = leds[i].color;
+      litBuf.length = 0;
+      for (; i < leds.length && leds[i].color === color; i++) { const l = leds[i]; if (Math.sin(t * l.rate + l.phase) > -0.2) litBuf.push(l); }
+      if (!litBuf.length) continue;
+      g.fillStyle = color;
+      g.globalAlpha = 0.25;
+      g.beginPath(); for (const l of litBuf) g.rect(l.x - 2, l.y - 2, 5, 5); g.fill();
+      g.globalAlpha = 1;
+      g.beginPath(); for (const l of litBuf) g.rect(l.x - 0.8, l.y - 0.8, 2.2, 2.2); g.fill();
     }
   }
   function drawOrbiters(v, now) {
@@ -503,7 +512,8 @@
     const margin = 40;
     let x, y, tries = 0;
     do {
-      x = margin + Math.random() * (W - margin * 2); y = margin + Math.random() * (H - margin * 2 - 30);
+      // keep clear of the toast band at the top and the timers and ticker at the bottom
+      x = margin + Math.random() * (W - margin * 2); y = 84 + Math.random() * Math.max(10, H - 84 - 96);
       tries++;
     } while (tries < 30 && Math.hypot(x - chip.x, y - chip.y) < chip.s * 0.95);
     spike = { x, y, bx: x, by: y, t: 0, life, seed: Math.random() * 10 };
@@ -551,13 +561,15 @@
     press = 1;
     const E = color || '#ffffff';
     if (floats.length > 28) floats.shift();
-    floats.push({ x: x + (Math.random() - 0.5) * 16, y: y - 10, text, color: E, size: big ? 30 : 20, t: 0, life: big ? 1.6 : 1.0 });
+    floats.push({ x: clampX(x + (Math.random() - 0.5) * 16, text, big ? 30 : 20), y: y - 10, text, color: E, size: big ? 30 : 20, t: 0, life: big ? 1.6 : 1.0 });
     if (ripples.length < 6) ripples.push({ t: 0, color: E });
     for (let i = 0; i < 2; i++) addPulse(null, true);
     for (let i = 0; i < 4; i++) { const a = Math.random() * TAU, sp = 60 + Math.random() * 120; sparks.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 80, t: 0, life: 0.4 + Math.random() * 0.3, color: '#ffffff' }); }
     if (sparks.length > 200) sparks.splice(0, sparks.length - 200);
   }
-  function floatText(x, y, text, color, size) { floats.push({ x, y, text, color, size: size || 22, t: 0, life: 1.8 }); }
+  // keep floating numbers fully on screen
+  function clampX(x, text, size) { const half = text.length * size * 0.29; return Math.max(half + 4, Math.min(W - half - 4, x)); }
+  function floatText(x, y, text, color, size) { size = size || 22; floats.push({ x: clampX(x, text, size), y, text, color, size, t: 0, life: 1.8 }); }
 
   /** v: { tier, owned, income, boost (active income effect color or null) } */
   function frame(v, now, dt) {
@@ -578,12 +590,7 @@
     drawChip(v, now);
     drawFx(dt);
     drawSpike(dt);
-    if (v.boost) {
-      const a = 0.18 + 0.1 * Math.sin(now / 200);
-      const gr = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.75);
-      gr.addColorStop(0, hexA(v.boost, 0)); gr.addColorStop(1, hexA(v.boost, a));
-      g.fillStyle = gr; g.fillRect(0, 0, W, H);
-    }
+    // the boost glow around the edges is a CSS overlay (#boost): far cheaper than a full-canvas gradient per frame
   }
 
   root.Scene = { init, resize, frame, hitChip, tapFx, floatText, spawnSpike, hitSpike, popSpike, eraOf, ERAS, get spike() { return spike; }, get chip() { return chip; } };

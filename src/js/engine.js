@@ -102,7 +102,7 @@
     if (s.money < first) return 0;
     let k = Math.floor(Math.log(s.money * (GROWTH - 1) / first + 1) / Math.log(GROWTH));
     while (k > 0 && genCost(s, id, k) > s.money * (1 + 1e-12)) k--; // float safety
-    return Math.max(0, k);
+    return isFinite(k) ? Math.max(0, k) : 0;
   }
   /** amount: number or 'max'. Returns how many were bought. */
   function buyGen(s, id, amount) {
@@ -165,7 +165,11 @@
     if (auto) s.autoTaps++; else { s.taps++; s.tapsRun++; }
     return v;
   }
-  function earn(s, v) { s.money += v; s.earnedRun += v; s.earnedLife += v; }
+  const CAP = 1e300; // keeps every number finite, so saves never turn into null
+  function earn(s, v) {
+    if (!(v > 0)) return;
+    s.money = Math.min(CAP, s.money + v); s.earnedRun = Math.min(CAP, s.earnedRun + v); s.earnedLife = Math.min(CAP, s.earnedLife + v);
+  }
 
   // ---------------- traffic spikes
   function spikeLevel(s) { let n = 0; for (let i = 0; i < 3; i++) if (s.ups['spk' + i]) n++; return n; }
@@ -215,9 +219,10 @@
   function offlineCap(s) { return (s.perks.weekend ? 24 : 8) * 3600; }
   /** Credit time away (wall clock). Returns null if not long enough to matter. */
   function applyOffline(s, now) {
-    const away = Math.max(0, (now - s.lastTick) / 1000);
+    if (now < s.lastTick) return null; // clock moved backwards: wait for it to catch up instead of granting time
+    const away = (now - s.lastTick) / 1000;
     s.lastTick = now;
-    if (away < OFFLINE_MIN) return null;
+    if (away < OFFLINE_MIN) { earn(s, income(s, false) * away); return null; } // short stalls count as play time
     const secs = Math.min(away, offlineCap(s));
     const earned = income(s, false) * secs * offlineRate(s);
     earn(s, earned);
@@ -281,11 +286,12 @@
 
   // ---------------- save / load
   function serialize(s) { return JSON.stringify(s); }
-  const num = (v, d) => (typeof v === 'number' && isFinite(v) && v >= 0 ? v : d);
+  const num = (v, d) => (typeof v === 'number' && isFinite(v) && v >= 0 ? Math.min(v, CAP) : d);
+  const own2 = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   /** Parse a save, filling gaps from a fresh state and dropping anything malformed. Throws on unreadable input. */
   function deserialize(text) {
     const d = JSON.parse(text);
-    if (!d || typeof d !== 'object') throw new Error('bad save');
+    if (!d || typeof d !== 'object' || Array.isArray(d) || d.v !== 1 || typeof d.money !== 'number') throw new Error('bad save');
     const s = newState();
     for (const k of ['money', 'earnedRun', 'earnedLife', 'taps', 'tapsRun', 'autoTaps', 'tapEarned', 'equity', 'equitySpent', 'prestiges', 'packets', 'packetsRun',
       'clock', 'runClock', 'nextPacket', 'autoAcc', 'buyAcc', 'bestIncome', 'created', 'lastTick', 'runStarted']) s[k] = num(d[k], s[k]);
@@ -293,9 +299,9 @@
     for (const k of ['ups', 'ach', 'perks']) {
       const src = d[k] && typeof d[k] === 'object' ? d[k] : {};
       const valid = k === 'ups' ? D.UPG : k === 'ach' ? D.ACHI : D.PERK;
-      for (const id in src) if (valid[id] && src[id]) s[k][id] = src[id];
+      for (const id of Object.keys(src)) if (own2(valid, id) && src[id]) s[k][id] = typeof src[id] === 'number' ? src[id] : 1;
     }
-    if (Array.isArray(d.effects)) s.effects = d.effects.filter(e => e && D.EFFECTS[e.kind] && num(e.until, -1) > s.clock).map(e => ({ kind: e.kind, until: e.until }));
+    if (Array.isArray(d.effects)) s.effects = d.effects.filter(e => e && typeof e.kind === 'string' && own2(D.EFFECTS, e.kind) && num(e.until, -1) > s.clock).map(e => ({ kind: e.kind, until: e.until }));
     s.autobuy = d.autobuy !== false;
     if (d.settings && typeof d.settings === 'object') {
       const st = d.settings;
